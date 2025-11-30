@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SmartPackingSolution.Demo/SmartPackingSolution.Demo.csproj" />
+  <Project Path="SmartPackingSolution.Tests/SmartPackingSolution.Tests.csproj" />
+  <Project Path="SmartPackingSolution/SmartPackingSolution.csproj" />
+</Solution>
