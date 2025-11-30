@@ -71,7 +71,13 @@ public class ContainerOptimizer
         }
     }
 
-    private void ValidatePackages(List<PackageItem> packages, Container container)
+    /// <summary>
+    /// Validates that packages can be considered for packing in the given container.
+    /// </summary>
+    /// <param name="packages">The list of packages.</param>
+    /// <param name="container">The target container.</param>
+    /// <exception cref="PackingException">Thrown when total weight exceeds capacity or a package is impossible to place.</exception>
+    private static void ValidatePackages(List<PackageItem> packages, Container container)
     {
         var totalWeight = packages.Sum(p => p.Weight);
 
@@ -83,6 +89,7 @@ public class ContainerOptimizer
 
         foreach (var package in packages)
         {
+            // Check if in any orientation it could fit. Simple coarse check: if all dimensions exceed container.
             if (package.Dimensions.Length > container.Dimensions.Length &&
                 package.Dimensions.Width > container.Dimensions.Width &&
                 package.Dimensions.Height > container.Dimensions.Height)

@@ -56,7 +56,7 @@ public class FirstFitDecreasingStrategy : IPackingStrategy
             ? new[] { RotationType.None, RotationType.RotateXY, RotationType.RotateXZ, RotationType.RotateYZ }
             : new[] { RotationType.None };
 
-        var positions = GenerateCandidatePositions(existingPackages, container);
+        var positions = GenerateCandidatePositions(existingPackages);
 
         foreach (var position in positions.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y))
         {
@@ -81,7 +81,11 @@ public class FirstFitDecreasingStrategy : IPackingStrategy
         return null;
     }
 
-    private List<Position> GenerateCandidatePositions(List<PlacedPackage> existingPackages, Container container)
+    /// <summary>
+    /// Generates candidate anchor positions derived from already placed packages.
+    /// </summary>
+    /// <param name="existingPackages">The set of already placed packages.</param>
+    private static List<Position> GenerateCandidatePositions(List<PlacedPackage> existingPackages)
     {
         var positions = new HashSet<Position> { Position.Origin };
 
