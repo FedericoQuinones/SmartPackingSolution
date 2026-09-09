@@ -175,7 +175,7 @@ public sealed class PackingContext
                     continue;
                 }
 
-                if (Options.EnforceLoadBearing && !_loads.CanCarry(box, item.Weight, neighbours))
+                if (Options.EnforceLoadBearing && !_loads.CanCarry(box, item, neighbours))
                 {
                     sawLoadFailure = true;
                     continue;
