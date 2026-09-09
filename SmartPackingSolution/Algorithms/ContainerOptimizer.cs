@@ -11,14 +11,19 @@ using SmartPackingSolution.Strategies;
 public class ContainerOptimizer
 {
     private readonly IPackingStrategy _strategy;
+    private readonly PackingOptions _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ContainerOptimizer"/> class.
     /// </summary>
-    /// <param name="strategy">The packing strategy to use. If null, uses FirstFitDecreasing.</param>
-    public ContainerOptimizer(IPackingStrategy? strategy = null)
+    /// <param name="strategy">
+    /// The packing strategy to use. Defaults to <see cref="BestFitDecreasingStrategy"/>.
+    /// </param>
+    /// <param name="options">The physical and search settings. Defaults are used when null.</param>
+    public ContainerOptimizer(IPackingStrategy? strategy = null, PackingOptions? options = null)
     {
-        _strategy = strategy ?? new FirstFitDecreasingStrategy();
+        _strategy = strategy ?? new BestFitDecreasingStrategy();
+        _options = options ?? PackingOptions.Default;
     }
 
     /// <summary>
@@ -28,7 +33,10 @@ public class ContainerOptimizer
     /// <param name="packages">The packages to pack.</param>
     /// <returns>A result containing the packing layout and statistics.</returns>
     /// <exception cref="ArgumentNullException">Thrown when container or packages are null.</exception>
-    /// <exception cref="PackingException">Thrown when the packing operation fails.</exception>
+    /// <exception cref="PackingException">
+    /// Thrown when the packing operation fails, or when the input is infeasible and
+    /// <see cref="PackingOptions.ThrowOnInfeasibleInput"/> is set.
+    /// </exception>
     /// <example>
     /// <code>
     /// var container = new Container(120, 100, 100, maxWeight: 1000);
@@ -42,42 +50,51 @@ public class ContainerOptimizer
     /// </example>
     public PackingResult OptimizePacking(Container container, IEnumerable<PackageItem> packages)
     {
-        if (container == null)
-        {
-            throw new ArgumentNullException(nameof(container));
-        }
-
-        if (packages == null)
-        {
-            throw new ArgumentNullException(nameof(packages));
-        }
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(packages);
 
         var packageList = packages.ToList();
 
         if (packageList.Count == 0)
         {
-            return new PackingResult(container, Array.Empty<PlacedPackage>(), Array.Empty<PackageItem>());
+            return new PackingResult(
+                container,
+                Array.Empty<PlacedPackage>(),
+                Array.Empty<UnpackedPackage>(),
+                _strategy.Name);
         }
 
-        ValidatePackages(packageList, container);
+        if (_options.ThrowOnInfeasibleInput)
+        {
+            ValidateFeasible(packageList, container);
+        }
 
         try
         {
-            return _strategy.Pack(container, packageList);
+            return _strategy.Pack(container, packageList, _options);
         }
-        catch (Exception ex) when (ex is not PackingException)
+        catch (Exception ex) when (ex is not PackingException and not OperationCanceledException)
         {
             throw new PackingException("An error occurred during packing optimization.", ex);
         }
     }
 
     /// <summary>
-    /// Validates that packages can be considered for packing in the given container.
+    /// Rejects input that cannot possibly be packed, for callers that opt in to failing
+    /// fast rather than receiving a partial result.
     /// </summary>
     /// <param name="packages">The list of packages.</param>
     /// <param name="container">The target container.</param>
-    /// <exception cref="PackingException">Thrown when total weight exceeds capacity or a package is impossible to place.</exception>
-    private static void ValidatePackages(List<PackageItem> packages, Container container)
+    /// <exception cref="PackingException">
+    /// Thrown when the total weight exceeds capacity, or a package fits in no orientation.
+    /// </exception>
+    /// <remarks>
+    /// This is opt-in because throwing is usually the wrong answer: one package a kilogram
+    /// over capacity should not deny the caller a layout for everything else. By default
+    /// such packages are reported through <see cref="PackingResult.UnpackedItems"/> with
+    /// an <see cref="UnpackedReason"/>.
+    /// </remarks>
+    private static void ValidateFeasible(List<PackageItem> packages, Container container)
     {
         var totalWeight = packages.Sum(p => p.Weight);
 
@@ -89,10 +106,10 @@ public class ContainerOptimizer
 
         foreach (var package in packages)
         {
-            // Check if in any orientation it could fit. Simple coarse check: if all dimensions exceed container.
-            if (package.Dimensions.Length > container.Dimensions.Length &&
-                package.Dimensions.Width > container.Dimensions.Width &&
-                package.Dimensions.Height > container.Dimensions.Height)
+            // Comparing the sorted dimension triples answers "does any orientation fit"
+            // exactly. The previous check required all three dimensions to exceed the
+            // container's, so a 200x5x5 package in a 100x100x100 container passed.
+            if (!package.Dimensions.FitsInsideInSomeOrientation(container.Dimensions))
             {
                 throw new PackingException(
                     $"Package '{package.Name}' is too large for the container in all orientations.");

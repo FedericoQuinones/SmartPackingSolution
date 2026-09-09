@@ -70,8 +70,8 @@ if (result.PackedItems.Any())
     
     foreach (var placed in result.PackedItems.OrderBy(p => p.Position.Z).ThenBy(p => p.Position.X))
     {
-        var rotationInfo = placed.Rotation != RotationType.None 
-            ? $" (Rotated: {placed.Rotation})" 
+        var rotationInfo = placed.Orientation != Orientation.LWH 
+            ? $" (Oriented: {placed.Orientation})" 
             : "";
             
         Console.WriteLine($"  • {placed.Package.Name,-20}");
@@ -89,7 +89,8 @@ if (result.UnpackedItems.Any())
     
     foreach (var unpacked in result.UnpackedItems)
     {
-        Console.WriteLine($"  • {unpacked.Name} - {unpacked.Dimensions.Length}x{unpacked.Dimensions.Width}x{unpacked.Dimensions.Height} cm, {unpacked.Weight}kg");
+        var item = unpacked.Package;
+        Console.WriteLine($"  • {item.Name} - {item.Dimensions.Length}x{item.Dimensions.Width}x{item.Dimensions.Height} cm, {item.Weight}kg — {unpacked.Reason}");
     }
     Console.WriteLine();
 }

@@ -14,24 +14,24 @@ public class PlacedPackageTests
         var position = new Position(10, 20, 30);
 
         // Act
-        var placed = new PlacedPackage(package, position, RotationType.None);
+        var placed = new PlacedPackage(package, position, Orientation.LWH);
 
         // Assert
         placed.Package.Should().Be(package);
         placed.Position.Should().Be(position);
-        placed.Rotation.Should().Be(RotationType.None);
+        placed.Orientation.Should().Be(Orientation.LWH);
         placed.ActualDimensions.Should().Be(package.Dimensions);
     }
 
     [Fact]
-    public void Constructor_WithRotation_ShouldApplyRotationToDimensions()
+    public void Constructor_WithOrientation_ShouldApplyItToDimensions()
     {
         // Arrange
         var package = new PackageItem("Box", 30, 20, 10, 5);
         var position = new Position(0, 0, 0);
 
         // Act
-        var placed = new PlacedPackage(package, position, RotationType.RotateXY);
+        var placed = new PlacedPackage(package, position, Orientation.WLH);
 
         // Assert
         placed.ActualDimensions.Length.Should().Be(20);

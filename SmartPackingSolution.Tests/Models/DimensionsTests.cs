@@ -49,46 +49,75 @@ public class DimensionsTests
         isValid.Should().Be(expected);
     }
 
-    [Fact]
-    public void Rotate_WithRotateXY_ShouldSwapLengthAndWidth()
+    [Theory]
+    // A rectangular box has exactly six axis-aligned orientations. The original enum
+    // defined only four, so two of them - and any placement that needed one - were
+    // unreachable.
+    [InlineData(Orientation.LWH, 100, 50, 30)]
+    [InlineData(Orientation.WLH, 50, 100, 30)]
+    [InlineData(Orientation.LHW, 100, 30, 50)]
+    [InlineData(Orientation.HLW, 30, 100, 50)]
+    [InlineData(Orientation.WHL, 50, 30, 100)]
+    [InlineData(Orientation.HWL, 30, 50, 100)]
+    public void Rotate_ShouldPermuteAxes(Orientation orientation, double length, double width, double height)
     {
         // Arrange
         var dimensions = new Dimensions(100, 50, 30);
 
         // Act
-        var rotated = dimensions.Rotate(RotationType.RotateXY);
+        var rotated = dimensions.Rotate(orientation);
 
         // Assert
-        rotated.Length.Should().Be(50);
-        rotated.Width.Should().Be(100);
-        rotated.Height.Should().Be(30);
+        rotated.Should().Be(new Dimensions(length, width, height));
     }
 
     [Fact]
-    public void Rotate_WithRotateXZ_ShouldSwapLengthAndHeight()
+    public void Rotate_ShouldCoverEveryPermutationExactlyOnce()
     {
         // Arrange
         var dimensions = new Dimensions(100, 50, 30);
 
         // Act
-        var rotated = dimensions.Rotate(RotationType.RotateXZ);
+        var results = Orientations.All.Select(dimensions.Rotate).ToList();
 
         // Assert
-        rotated.Length.Should().Be(30);
-        rotated.Width.Should().Be(50);
-        rotated.Height.Should().Be(100);
+        results.Should().HaveCount(6).And.OnlyHaveUniqueItems();
+        results.Should().OnlyContain(r => r.Volume == dimensions.Volume);
     }
 
     [Fact]
-    public void Rotate_WithNone_ShouldReturnSameDimensions()
+    public void Rotate_WithLWH_ShouldReturnSameDimensions()
     {
         // Arrange
         var dimensions = new Dimensions(100, 50, 30);
 
         // Act
-        var rotated = dimensions.Rotate(RotationType.None);
+        var rotated = dimensions.Rotate(Orientation.LWH);
 
         // Assert
         rotated.Should().Be(dimensions);
+    }
+
+    [Theory]
+    // The container is 100x100x100, so a 200x5x5 package fits in no orientation even
+    // though only one of its dimensions exceeds the container's.
+    [InlineData(200, 5, 5, false)]
+    [InlineData(200, 200, 200, false)]
+    [InlineData(150, 90, 90, false)]
+    [InlineData(90, 150, 90, false)]
+    [InlineData(99, 99, 99, true)]
+    [InlineData(30, 100, 60, true)]
+    public void FitsInsideInSomeOrientation_ShouldConsiderEveryOrientation(
+        double length, double width, double height, bool expected)
+    {
+        // Arrange
+        var container = new Dimensions(100, 100, 100);
+        var package = new Dimensions(length, width, height);
+
+        // Act
+        var fits = package.FitsInsideInSomeOrientation(container);
+
+        // Assert
+        fits.Should().Be(expected);
     }
 }
