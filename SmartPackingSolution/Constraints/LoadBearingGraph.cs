@@ -5,7 +5,7 @@ using SmartPackingSolution.Models;
 
 /// <summary>
 /// Tracks how much weight rests on each placed package, and rejects placements that
-/// would crush something below.
+/// would crush something.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,6 +22,12 @@ using SmartPackingSolution.Models;
 /// travels. Fragility falls out of the same mechanism: a fragile package has a capacity
 /// of zero kilograms, so nothing may rest on it - but only when something is genuinely
 /// above it in XY.
+/// </para>
+/// <para>
+/// A placement is checked in both directions. Packing does not proceed strictly upwards:
+/// a package can drop into a gap beneath something already placed, and by closing that
+/// gap it starts carrying a share of the load above. Checking only what a package rests
+/// on lets a fragile item slide underneath a loaded stack unnoticed.
 /// </para>
 /// </remarks>
 public sealed class LoadBearingGraph
@@ -49,29 +55,46 @@ public sealed class LoadBearingGraph
     public double LoadOn(int index) => _loadOn[index];
 
     /// <summary>
-    /// Determines whether a candidate placement can be carried by what is beneath it.
+    /// Determines whether a candidate placement can be carried by what is beneath it, and
+    /// whether it could carry whatever it would end up beneath.
     /// </summary>
     /// <param name="candidate">The box the package would occupy.</param>
-    /// <param name="weight">The package's own weight in kilograms.</param>
+    /// <param name="package">The package being placed.</param>
     /// <param name="neighbourIndices">Indices of nearby registered packages to consider.</param>
-    /// <returns>True if no package in the support chain would be overloaded.</returns>
-    public bool CanCarry(in AxisAlignedBox candidate, double weight, IEnumerable<int> neighbourIndices)
+    /// <returns>True if no package would be overloaded, the candidate included.</returns>
+    public bool CanCarry(in AxisAlignedBox candidate, PackageItem package, IEnumerable<int> neighbourIndices)
     {
+        ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(neighbourIndices);
 
-        var shares = SupporterShares(candidate, neighbourIndices);
+        var neighbours = neighbourIndices as IReadOnlyList<int> ?? neighbourIndices.ToList();
+
+        // What the candidate would inherit from packages it slides underneath.
+        var inherited = 0.0;
+        foreach (var (_, share, transmitted) in OverheadShares(candidate, neighbours))
+        {
+            inherited += share * transmitted;
+        }
+
+        if (inherited > package.MaxSupportedWeight + _tolerance)
+        {
+            return false;
+        }
+
+        // Everything the candidate carries, its own weight included, presses downwards.
+        var shares = SupporterShares(candidate, neighbours);
         if (shares.Count == 0)
         {
             return true;
         }
 
-        var added = new Dictionary<int, double>();
+        var deltas = new Dictionary<int, double>();
         foreach (var (index, share) in shares)
         {
-            Accumulate(added, index, weight * share);
+            Accumulate(deltas, index, (package.Weight + inherited) * share);
         }
 
-        foreach (var (index, extra) in added)
+        foreach (var (index, extra) in deltas)
         {
             if (_loadOn[index] + extra > _packages[index].Package.MaxSupportedWeight + _tolerance)
             {
@@ -83,7 +106,8 @@ public sealed class LoadBearingGraph
     }
 
     /// <summary>
-    /// Registers a placement and propagates its weight down through its supporters.
+    /// Registers a placement, propagates its weight down through its supporters, and
+    /// re-links any package it has slid underneath.
     /// </summary>
     /// <param name="placed">The package that was placed.</param>
     /// <param name="neighbourIndices">Indices of nearby registered packages to consider.</param>
@@ -93,36 +117,47 @@ public sealed class LoadBearingGraph
         ArgumentNullException.ThrowIfNull(placed);
         ArgumentNullException.ThrowIfNull(neighbourIndices);
 
-        var shares = SupporterShares(placed.Bounds, neighbourIndices);
+        var neighbours = neighbourIndices as IReadOnlyList<int> ?? neighbourIndices.ToList();
+        var overhead = OverheadShares(placed.Bounds, neighbours);
+        var shares = SupporterShares(placed.Bounds, neighbours);
 
+        var index = _packages.Count;
         _packages.Add(placed);
         _loadOn.Add(0);
         _supporters.Add(shares);
 
-        var added = new Dictionary<int, double>();
-        foreach (var (index, share) in shares)
+        // Take over a share of everything now resting on this package, releasing the
+        // supporters that were carrying that share on their own.
+        foreach (var (above, share, transmitted) in overhead)
         {
-            Accumulate(added, index, placed.Package.Weight * share);
+            foreach (var (oldSupporter, oldShare) in _supporters[above])
+            {
+                Propagate(oldSupporter, -transmitted * oldShare);
+            }
+
+            _supporters[above] = RecomputeShares(above, index, neighbours);
+
+            foreach (var (newSupporter, newShare) in _supporters[above])
+            {
+                Propagate(newSupporter, transmitted * newShare);
+            }
         }
 
-        foreach (var (index, extra) in added)
-        {
-            _loadOn[index] += extra;
-        }
+        Propagate(index, placed.Package.Weight, includeSelf: false);
 
-        return _packages.Count - 1;
+        return index;
     }
 
     /// <summary>
-    /// Finds which registered packages carry a candidate box, and what fraction of its
-    /// weight each one takes.
+    /// Finds which registered packages carry a candidate box, and what fraction of the
+    /// load each one takes.
     /// </summary>
     /// <param name="candidate">The box resting on the supporters.</param>
     /// <param name="neighbourIndices">Indices of nearby registered packages to consider.</param>
     /// <returns>Supporter indices paired with their share of the load, summing to one.</returns>
     private List<(int Index, double Share)> SupporterShares(
         in AxisAlignedBox candidate,
-        IEnumerable<int> neighbourIndices)
+        IReadOnlyList<int> neighbourIndices)
     {
         var contacts = new List<(int Index, double Area)>();
         var totalArea = 0.0;
@@ -143,17 +178,98 @@ public sealed class LoadBearingGraph
             }
         }
 
-        if (totalArea <= _tolerance)
+        return totalArea <= _tolerance
+            ? []
+            : [.. contacts.Select(c => (c.Index, c.Area / totalArea))];
+    }
+
+    /// <summary>
+    /// Finds the registered packages a candidate box would slide underneath, the share of
+    /// their load it would take on, and how much load each is passing down.
+    /// </summary>
+    /// <param name="candidate">The box being placed.</param>
+    /// <param name="neighbourIndices">Indices of nearby registered packages to consider.</param>
+    /// <returns>The package above, the candidate's share of it, and its transmitted load.</returns>
+    private List<(int Above, double Share, double Transmitted)> OverheadShares(
+        in AxisAlignedBox candidate,
+        IReadOnlyList<int> neighbourIndices)
+    {
+        var results = new List<(int, double, double)>();
+
+        foreach (var index in neighbourIndices)
         {
-            return [];
+            var above = _packages[index].Bounds;
+            if (Math.Abs(candidate.MaxZ - above.MinZ) > _tolerance)
+            {
+                continue;
+            }
+
+            var newArea = above.FootprintIntersectionArea(candidate);
+            if (newArea <= _tolerance)
+            {
+                continue;
+            }
+
+            var existingArea = 0.0;
+            foreach (var (supporter, _) in _supporters[index])
+            {
+                existingArea += above.FootprintIntersectionArea(_packages[supporter].Bounds);
+            }
+
+            var share = newArea / (existingArea + newArea);
+            var transmitted = _packages[index].Package.Weight + _loadOn[index];
+
+            results.Add((index, share, transmitted));
         }
 
-        return [.. contacts.Select(c => (c.Index, c.Area / totalArea))];
+        return results;
+    }
+
+    /// <summary>
+    /// Recomputes a package's supporter shares once a new package has joined them.
+    /// </summary>
+    /// <param name="above">The package whose supporters changed.</param>
+    /// <param name="newSupporter">The index of the package that joined.</param>
+    /// <param name="neighbourIndices">Indices of nearby registered packages to consider.</param>
+    /// <returns>The updated supporter shares.</returns>
+    private List<(int Index, double Share)> RecomputeShares(
+        int above,
+        int newSupporter,
+        IReadOnlyList<int> neighbourIndices)
+    {
+        var candidates = _supporters[above]
+            .Select(s => s.Index)
+            .Append(newSupporter)
+            .Concat(neighbourIndices)
+            .Distinct()
+            .ToList();
+
+        return SupporterShares(_packages[above].Bounds, candidates);
     }
 
     /// <summary>
     /// Adds a load to a package and passes it on to that package's own supporters, so the
     /// weight reaches the floor through every item in the chain.
+    /// </summary>
+    /// <param name="index">The package receiving the load.</param>
+    /// <param name="load">The load in kilograms; negative values release load.</param>
+    /// <param name="includeSelf">Whether the load counts against this package's own capacity.</param>
+    private void Propagate(int index, double load, bool includeSelf = true)
+    {
+        if (includeSelf)
+        {
+            _loadOn[index] += load;
+        }
+
+        foreach (var (supporter, share) in _supporters[index])
+        {
+            Propagate(supporter, load * share);
+        }
+    }
+
+    /// <summary>
+    /// Records a load against a package and its supporters without mutating the graph,
+    /// so a candidate placement can be tested before it is committed.
     /// </summary>
     /// <param name="accumulator">Running totals, keyed by package index.</param>
     /// <param name="index">The package receiving the load.</param>
@@ -162,9 +278,9 @@ public sealed class LoadBearingGraph
     {
         accumulator[index] = accumulator.GetValueOrDefault(index) + load;
 
-        foreach (var (supporterIndex, share) in _supporters[index])
+        foreach (var (supporter, share) in _supporters[index])
         {
-            Accumulate(accumulator, supporterIndex, load * share);
+            Accumulate(accumulator, supporter, load * share);
         }
     }
 }
