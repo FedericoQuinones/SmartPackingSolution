@@ -56,7 +56,7 @@ Finds the position that minimizes wasted space for each item.
 
 ## Performance
 
-- **Time Complexity**: O(n² log n) for most scenarios
+- **Time Complexity**: O(nÂ² log n) for most scenarios
 - **Memory**: O(n) where n is the number of packages
 - **Benchmarks**: Can process 1000+ items in under 100ms
 
