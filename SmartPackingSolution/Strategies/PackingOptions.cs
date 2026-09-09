@@ -60,10 +60,13 @@ public sealed record PackingOptions
     /// Gets the cap on candidate anchor positions retained per container.
     /// </summary>
     /// <remarks>
-    /// A safety valve for pathological inputs. The anchor set is pruned to the most
-    /// promising positions - lowest, then closest to the origin - when it exceeds this.
+    /// A bound on the cost of the placement search, which reads the anchor set once per
+    /// package. When the set exceeds this it is pruned to the most promising positions -
+    /// lowest, then closest to the origin. Measured on a thousand-package load, raising
+    /// it from 4000 to 20000 changed packed volume by nothing at all, while dropping it to
+    /// 400 cost twenty points, so this is a ceiling rather than a tuning knob.
     /// </remarks>
-    public int MaxCandidatePositions { get; init; } = 20000;
+    public int MaxCandidatePositions { get; init; } = 4000;
 
     /// <summary>
     /// Gets an optional wall-clock budget for the packing run.

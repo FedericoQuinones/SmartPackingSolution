@@ -52,7 +52,7 @@ public class ReportingTests
         var container = new Container(100, 100, 100, 500);
         var packages = new List<PackageItem>
         {
-            new PackageItem("Floor slab", 100, 100, 20, 10, PackagePriority.Heavy)
+            new PackageItem("Floor slab", 100, 100, 20, 10, PackagePriority.Heavy, allowRotation: false)
         };
 
         var result = new BestFitDecreasingStrategy().Pack(container, packages);
