@@ -4,6 +4,7 @@ using FluentAssertions;
 using SmartPackingSolution.Algorithms;
 using SmartPackingSolution.Exceptions;
 using SmartPackingSolution.Models;
+using SmartPackingSolution.Strategies;
 using Xunit;
 
 public class ContainerOptimizerTests
@@ -75,10 +76,34 @@ public class ContainerOptimizerTests
     }
 
     [Fact]
-    public void OptimizePacking_WithExcessiveWeight_ShouldThrowException()
+    public void OptimizePacking_WithExcessiveWeight_ShouldReportUnpackedRatherThanThrow()
+    {
+        // Arrange - one package fits within the capacity, the other does not.
+        var optimizer = new ContainerOptimizer();
+        var container = new Container(100, 100, 100, 10);
+        var packages = new List<PackageItem>
+        {
+            new PackageItem("Light Box", 30, 20, 10, 8),
+            new PackageItem("Heavy Box", 30, 20, 10, 50)
+        };
+
+        // Act
+        var result = optimizer.OptimizePacking(container, packages);
+
+        // Assert - refusing to produce any layout because one package is too heavy
+        // throws away a perfectly good answer for the rest of the load.
+        result.PackedItems.Should().ContainSingle(p => p.Package.Name == "Light Box");
+        result.UnpackedItems.Should().ContainSingle()
+            .Which.Reason.Should().Be(UnpackedReason.WeightCapacityExceeded);
+        result.TotalWeight.Should().BeLessOrEqualTo(container.MaxWeight);
+    }
+
+    [Fact]
+    public void OptimizePacking_WithExcessiveWeightAndThrowEnabled_ShouldThrowException()
     {
         // Arrange
-        var optimizer = new ContainerOptimizer();
+        var options = PackingOptions.Default with { ThrowOnInfeasibleInput = true };
+        var optimizer = new ContainerOptimizer(options: options);
         var container = new Container(100, 100, 100, 10);
         var packages = new List<PackageItem>
         {
@@ -89,27 +114,54 @@ public class ContainerOptimizerTests
         var act = () => optimizer.OptimizePacking(container, packages);
 
         // Assert
-        act.Should().Throw<PackingException>()
-            .WithMessage("*weight*");
+        act.Should().Throw<PackingException>().WithMessage("*weight*");
     }
 
-    [Fact]
-    public void OptimizePacking_WithOversizedPackage_ShouldThrowException()
+    [Theory]
+    [InlineData(200, 200, 200)]
+    // 200x5x5 exceeds the container on a single axis only. The original check required
+    // all three dimensions to exceed it, so a package like this slipped through as packable.
+    [InlineData(200, 5, 5)]
+    public void OptimizePacking_WithOversizedPackage_ShouldReportItAsTooLarge(
+        double length, double width, double height)
     {
         // Arrange
         var optimizer = new ContainerOptimizer();
         var container = new Container(100, 100, 100, 1000);
         var packages = new List<PackageItem>
         {
-            new PackageItem("Huge Box", 200, 200, 200, 5)
+            new PackageItem("Huge Box", length, width, height, 5)
+        };
+
+        // Act
+        var result = optimizer.OptimizePacking(container, packages);
+
+        // Assert
+        result.PackedItems.Should().BeEmpty();
+        result.UnpackedItems.Should().ContainSingle()
+            .Which.Reason.Should().Be(UnpackedReason.TooLargeForContainer);
+    }
+
+    [Theory]
+    [InlineData(200, 200, 200)]
+    [InlineData(200, 5, 5)]
+    public void OptimizePacking_WithOversizedPackageAndThrowEnabled_ShouldThrowException(
+        double length, double width, double height)
+    {
+        // Arrange
+        var options = PackingOptions.Default with { ThrowOnInfeasibleInput = true };
+        var optimizer = new ContainerOptimizer(options: options);
+        var container = new Container(100, 100, 100, 1000);
+        var packages = new List<PackageItem>
+        {
+            new PackageItem("Huge Box", length, width, height, 5)
         };
 
         // Act
         var act = () => optimizer.OptimizePacking(container, packages);
 
         // Assert
-        act.Should().Throw<PackingException>()
-            .WithMessage("*too large*");
+        act.Should().Throw<PackingException>().WithMessage("*too large*");
     }
 
     [Fact]

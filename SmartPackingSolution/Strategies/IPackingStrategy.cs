@@ -8,10 +8,18 @@ using SmartPackingSolution.Models;
 public interface IPackingStrategy
 {
     /// <summary>
+    /// Gets the display name of this strategy.
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
     /// Attempts to pack a collection of packages into a container.
     /// </summary>
     /// <param name="container">The container to pack items into.</param>
     /// <param name="packages">The packages to pack.</param>
+    /// <param name="options">
+    /// The physical and search settings to apply. Defaults are used when null.
+    /// </param>
     /// <returns>A packing result containing placed and unplaced items.</returns>
-    PackingResult Pack(Container container, IEnumerable<PackageItem> packages);
+    PackingResult Pack(Container container, IEnumerable<PackageItem> packages, PackingOptions? options = null);
 }

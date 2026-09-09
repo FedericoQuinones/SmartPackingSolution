@@ -14,7 +14,7 @@ public class PackingResultTests
         var package = new PackageItem("Box", 30, 20, 10, 5);
         var placed = new PlacedPackage(package, new Position(0, 0, 0));
         var packedItems = new List<PlacedPackage> { placed };
-        var unpackedItems = new List<PackageItem>();
+        var unpackedItems = new List<UnpackedPackage>();
 
         // Act
         var result = new PackingResult(container, packedItems, unpackedItems);
@@ -37,7 +37,7 @@ public class PackingResultTests
         var packedItems = new List<PlacedPackage> { placed };
 
         // Act
-        var result = new PackingResult(container, packedItems, new List<PackageItem>());
+        var result = new PackingResult(container, packedItems, new List<UnpackedPackage>());
 
         // Assert
         result.SpaceUtilization.Should().BeApproximately(0.125, 0.001);
@@ -56,7 +56,7 @@ public class PackingResultTests
         var result = new PackingResult(
             container,
             new List<PlacedPackage> { placed },
-            new List<PackageItem> { package2 });
+            new List<UnpackedPackage> { new UnpackedPackage(package2, UnpackedReason.NoSpaceAvailable) });
 
         // Assert
         result.IsFullyPacked.Should().BeFalse();
@@ -76,7 +76,7 @@ public class PackingResultTests
         var result = new PackingResult(
             container,
             new List<PlacedPackage> { placed1, placed2 },
-            new List<PackageItem>());
+            new List<UnpackedPackage>());
 
         // Assert
         result.TotalWeight.Should().Be(15);
