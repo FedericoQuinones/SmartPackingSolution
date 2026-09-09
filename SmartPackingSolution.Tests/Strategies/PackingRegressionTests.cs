@@ -21,9 +21,11 @@ public class PackingRegressionTests
         var container = new Container(100, 50, 60, 1000);
         var packages = new List<PackageItem>
         {
-            new PackageItem("Glassware", 50, 50, 20, 2, PackagePriority.Fragile),
-            new PackageItem("Crate", 50, 50, 20, 8, PackagePriority.Heavy),
-            new PackageItem("Toolbox", 50, 50, 20, 10, PackagePriority.Medium)
+            // Rotation is off so the container holds exactly two boxes per level and the
+            // third has no choice but to stack, which is the situation under test.
+            new PackageItem("Glassware", 50, 50, 20, 2, PackagePriority.Fragile, allowRotation: false),
+            new PackageItem("Crate", 50, 50, 20, 8, PackagePriority.Heavy, allowRotation: false),
+            new PackageItem("Toolbox", 50, 50, 20, 10, PackagePriority.Medium, allowRotation: false)
         };
 
         var result = new BestFitDecreasingStrategy().Pack(
@@ -119,11 +121,11 @@ public class PackingRegressionTests
         var container = new Container(100, 100, 200, 100000);
         var packages = new List<PackageItem>
         {
-            new PackageItem("Base", 100, 100, 10, 1, PackagePriority.Medium)
+            new PackageItem("Base", 100, 100, 10, 1, PackagePriority.Medium, allowRotation: false)
         };
 
         packages.AddRange(Enumerable.Range(1, 10).Select(i =>
-            new PackageItem($"Slab {i}", 100, 100, 10, 5, PackagePriority.Medium)));
+            new PackageItem($"Slab {i}", 100, 100, 10, 5, PackagePriority.Medium, allowRotation: false)));
 
         var result = new BestFitDecreasingStrategy().Pack(
             container,

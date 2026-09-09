@@ -15,6 +15,12 @@ public sealed class SpatialIndex
     private readonly double _cellSize;
     private readonly Dictionary<(int X, int Y, int Z), List<int>> _cells = [];
 
+    // De-duplication uses a generation stamp per id rather than a HashSet, so a query
+    // allocates nothing. The failure path of the placement search runs one query per
+    // candidate anchor and orientation, so per-query allocation dominated large runs.
+    private int[] _seen = [];
+    private int _generation;
+
     /// <summary>
     /// Initializes a new index.
     /// </summary>
@@ -34,6 +40,11 @@ public sealed class SpatialIndex
     /// <param name="box">The box to index.</param>
     public void Add(int id, in AxisAlignedBox box)
     {
+        if (id >= _seen.Length)
+        {
+            Array.Resize(ref _seen, Math.Max(id + 1, Math.Max(16, _seen.Length * 2)));
+        }
+
         var (minX, minY, minZ) = CellOf(box.MinX, box.MinY, box.MinZ);
         var (maxX, maxY, maxZ) = CellOf(box.MaxX, box.MaxY, box.MaxZ);
 
@@ -64,14 +75,16 @@ public sealed class SpatialIndex
     /// An outward expansion of the query, so boxes merely touching the region - the ones
     /// that support it or bear against it - are also returned.
     /// </param>
-    /// <returns>Candidate identifiers, each returned once. May contain false positives.</returns>
-    public IEnumerable<int> Query(in AxisAlignedBox query, double margin = 0)
+    /// <param name="results">Receives the candidate identifiers; cleared first.</param>
+    public void Query(in AxisAlignedBox query, double margin, List<int> results)
     {
+        ArgumentNullException.ThrowIfNull(results);
+
+        results.Clear();
+        _generation++;
+
         var (minX, minY, minZ) = CellOf(query.MinX - margin, query.MinY - margin, query.MinZ - margin);
         var (maxX, maxY, maxZ) = CellOf(query.MaxX + margin, query.MaxY + margin, query.MaxZ + margin);
-
-        var seen = new HashSet<int>();
-        var results = new List<int>();
 
         for (var x = minX; x <= maxX; x++)
         {
@@ -86,16 +99,17 @@ public sealed class SpatialIndex
 
                     foreach (var id in bucket)
                     {
-                        if (seen.Add(id))
+                        if (_seen[id] == _generation)
                         {
-                            results.Add(id);
+                            continue;
                         }
+
+                        _seen[id] = _generation;
+                        results.Add(id);
                     }
                 }
             }
         }
-
-        return results;
     }
 
     private (int X, int Y, int Z) CellOf(double x, double y, double z) =>
