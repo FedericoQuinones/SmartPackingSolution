@@ -78,7 +78,7 @@ Override per package with the `maxSupportedWeight` constructor argument.
 | `BestOfStrategy` | runs the others across several orderings in parallel, keeps the best | when the load shape is unknown |
 
 No single heuristic wins everywhere — on the demo's warehouse crate the layer packer
-reaches 86.8% where first-fit manages 82.0%, and on mixed furniture the ranking reverses.
+reaches 85.6% where first-fit manages 82.0%, and on mixed furniture the ranking reverses.
 `BestOfStrategy` exists because the runs are independent and packages are immutable, so
 trying them all costs about as long as the slowest one:
 
@@ -192,15 +192,16 @@ reflects the packing and not a generous container. Reproduce with
 
 | Packages | Strategy | Packed volume | Time |
 |---:|---|---:|---:|
-| 100 | Best-Fit Decreasing | 77.1% | 32 ms |
-| 100 | Layer-Based | 81.6% | 64 ms |
-| 100 | Best-Of | 81.6% | 161 ms |
+| 100 | Best-Fit Decreasing | 77.1% | 34 ms |
+| 100 | Layer-Based | 81.6% | 69 ms |
+| 100 | Best-Of | 81.6% | 176 ms |
 | 1 000 | Best-Fit Decreasing | 60.4% | 0.9 s |
 | 1 000 | Best-Of | 60.4% | 2.8 s |
-| 10 000 | Best-Fit Decreasing | 27.7% | 40 s |
-| 10 000 | Best-Of | 27.7% | 92 s |
+| 10 000 | Best-Fit Decreasing | 27.7% | 43 s |
+| 10 000 | Best-Of | 27.7% | 104 s |
 
-Every layout above passes the validator.
+Every layout above passes the validator. Times are from one machine on .NET 10 and will
+move with the hardware; the packed volumes are deterministic and will not.
 
 Two things are worth reading off that table rather than glossing over.
 
