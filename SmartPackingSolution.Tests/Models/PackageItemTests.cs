@@ -27,10 +27,10 @@ public class PackageItemTests
     [InlineData("")]
     [InlineData(" ")]
     [InlineData(null)]
-    public void Constructor_WithInvalidName_ShouldThrowException(string name)
+    public void Constructor_WithInvalidName_ShouldThrowException(string? name)
     {
         // Act
-        var act = () => new PackageItem(name, 100, 50, 30, 10);
+        var act = () => new PackageItem(name!, 100, 50, 30, 10);
 
         // Assert
         act.Should().Throw<ArgumentException>()

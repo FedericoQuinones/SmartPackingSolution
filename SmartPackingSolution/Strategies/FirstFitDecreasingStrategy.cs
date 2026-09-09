@@ -5,7 +5,7 @@ using SmartPackingSolution.Models;
 /// <summary>
 /// Implements a First-Fit Decreasing packing strategy.
 /// Sorts items by volume (largest first) and places each in the first available position.
-/// Time Complexity: O(n² log n)
+/// Time Complexity: O(nÂ² log n)
 /// </summary>
 public class FirstFitDecreasingStrategy : IPackingStrategy
 {
